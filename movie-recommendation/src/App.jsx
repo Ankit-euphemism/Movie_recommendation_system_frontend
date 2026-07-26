@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Film, LogIn, LogOut, Heart, Sparkles, Loader, Mail, Sliders } from 'lucide-react';
+import { Film, LogIn, LogOut, Heart, Sparkles, Loader, Mail, Sliders, Play } from 'lucide-react';
 import OnboardingModal from './components/OnboardingModal';
+import VideoPlayerModal from './components/VideoPlayerModal';
 
 const API_BASE_URL = "http://localhost:8000/api";
 
@@ -13,6 +14,10 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userStatus, setUserStatus] = useState('');
+
+  // Streaming state
+  const [streamingMovie, setStreamingMovie] = useState(null); // current movie object
+  const [streamingUrl, setStreamingUrl] = useState('');        // video URL from backend
 
   // 1. Synchronize Profile Data on Login or Reload
   useEffect(() => {
@@ -75,6 +80,8 @@ export default function App() {
     setLikedMovies([]);
     setRecommendations([]);
     setShowOnboarding(false);
+    setStreamingMovie(null);
+    setStreamingUrl('');
   };
 
   // 5. Toggle Like Status
@@ -110,6 +117,24 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 7. Open Stream for a Movie
+  const openStream = async (movie) => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/stream/${movie.id}`);
+      setStreamingUrl(res.data.video_url);
+      setStreamingMovie(movie);
+    } catch (err) {
+      console.error("Failed to fetch stream URL:", err);
+    }
+  };
+
+  // 8. Handle Watch Event Callback (implicit feedback from video player)
+  const handleWatchEvent = (updatedLikes) => {
+    setLikedMovies(updatedLikes);
+    // Refresh recommendations to reflect the implicit feedback
+    fetchRecommendations(userEmail);
   };
 
   // RENDER: LOGIN VIEW
@@ -154,6 +179,17 @@ export default function App() {
     <div className="min-h-screen bg-netflixDark text-white">
       {/* Cold-Start Modal */}
       {showOnboarding && <OnboardingModal onComplete={handleOnboardingComplete} />}
+
+      {/* Video Player Modal */}
+      {streamingMovie && streamingUrl && (
+        <VideoPlayerModal
+          movie={streamingMovie}
+          videoUrl={streamingUrl}
+          userEmail={userEmail}
+          onClose={() => { setStreamingMovie(null); setStreamingUrl(''); }}
+          onWatchEvent={handleWatchEvent}
+        />
+      )}
 
       {/* Navigation Header */}
       <nav className="flex items-center justify-between px-8 py-4 bg-black/80 border-b border-gray-800 sticky top-0 z-40 backdrop-blur-md">
@@ -217,11 +253,20 @@ export default function App() {
             {recommendations.map((movie) => (
               <div
                 key={movie.id}
-                className="bg-netflixCard rounded-lg overflow-hidden border border-gray-800 p-4 flex flex-col justify-between hover:border-netflixRed/40 transition-all shadow-lg"
+                className="bg-netflixCard rounded-lg overflow-hidden border border-gray-800 p-4 flex flex-col justify-between hover:border-netflixRed/40 transition-all shadow-lg group"
               >
                 <div>
-                  <div className="h-32 bg-gray-900 rounded mb-3 flex items-center justify-center relative">
-                    <Film className="w-8 h-8 text-gray-700" />
+                  <div
+                    className="h-32 bg-gray-900 rounded mb-3 flex items-center justify-center relative cursor-pointer overflow-hidden"
+                    onClick={() => openStream(movie)}
+                  >
+                    <Film className="w-8 h-8 text-gray-700 group-hover:opacity-30 transition-opacity" />
+                    {/* Play overlay on hover */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                      <div className="bg-netflixRed/90 rounded-full p-3 shadow-lg hover:scale-110 transition-transform">
+                        <Play className="w-5 h-5 text-white fill-white" />
+                      </div>
+                    </div>
                     <span className="absolute top-2 right-2 bg-black/80 text-[10px] px-2 py-0.5 rounded text-netflixRed font-mono font-bold border border-netflixRed/30">
                       {Math.round(movie.hybrid_score * 100)}% Match
                     </span>
@@ -243,17 +288,26 @@ export default function App() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => toggleLike(movie.title)}
-                    className={`w-full text-xs py-2 rounded font-medium flex items-center justify-center gap-1 transition-colors mt-2 ${
-                      likedMovies.includes(movie.title)
-                        ? 'bg-netflixRed text-white'
-                        : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    <Heart className={`w-3.5 h-3.5 ${likedMovies.includes(movie.title) ? 'fill-current' : ''}`} />
-                    {likedMovies.includes(movie.title) ? 'Liked' : 'Like'}
-                  </button>
+                  {/* Action Buttons: Watch + Like */}
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => openStream(movie)}
+                      className="flex-1 text-xs py-2 rounded font-medium flex items-center justify-center gap-1 transition-colors bg-netflixRed hover:bg-red-700 text-white"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" /> Watch
+                    </button>
+                    <button
+                      onClick={() => toggleLike(movie.title)}
+                      className={`flex-1 text-xs py-2 rounded font-medium flex items-center justify-center gap-1 transition-colors ${
+                        likedMovies.includes(movie.title)
+                          ? 'bg-pink-600 text-white'
+                          : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                      }`}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${likedMovies.includes(movie.title) ? 'fill-current' : ''}`} />
+                      {likedMovies.includes(movie.title) ? 'Liked' : 'Like'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
