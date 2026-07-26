@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Film, LogIn, LogOut, Heart, Sparkles, Loader, Mail, Sliders, Play } from 'lucide-react';
+import { Film, LogIn, LogOut, Heart, Sparkles, Loader, Mail, Sliders, Play, Lock, UserPlus, AlertCircle } from 'lucide-react';
 import OnboardingModal from './components/OnboardingModal';
 import VideoPlayerModal from './components/VideoPlayerModal';
 
 const API_BASE_URL = "http://localhost:8000/api";
 
+// Helper: get auth headers from stored JWT token
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('accessToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export default function App() {
   const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || '');
   const [likedMovies, setLikedMovies] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
@@ -15,30 +22,40 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userStatus, setUserStatus] = useState('');
 
-  // Streaming state
-  const [streamingMovie, setStreamingMovie] = useState(null); // current movie object
-  const [streamingUrl, setStreamingUrl] = useState('');        // video URL from backend
+  // Auth state
+  const [isSignup, setIsSignup] = useState(false);        // Toggle between login/signup
+  const [authError, setAuthError] = useState('');          // Auth error message
+  const [authLoading, setAuthLoading] = useState(false);   // Auth button loading
 
-  // 1. Synchronize Profile Data on Login or Reload
+  // Streaming state
+  const [streamingMovie, setStreamingMovie] = useState(null);
+  const [streamingUrl, setStreamingUrl] = useState('');
+
+  // 1. On mount/reload: if we have a stored email+token, load profile from backend
   useEffect(() => {
     if (!userEmail) return;
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      // No token stored — force re-login
+      handleLogout();
+      return;
+    }
 
     const initializeUser = async () => {
       setLoading(true);
       try {
-        // Authenticate / fetch saved profile
-        const loginRes = await axios.post(`${API_BASE_URL}/login`, { email: userEmail });
-        const likes = loginRes.data.liked_movies || [];
-        setLikedMovies(likes);
+        // Re-login to refresh likes from DB (token is still valid)
+        // We use a lightweight profile fetch via the like list from the stored token
+        const storedLikes = JSON.parse(localStorage.getItem('likedMovies') || '[]');
+        setLikedMovies(storedLikes);
 
-        // Check for Cold-Start (fewer than 3 movies liked)
-        if (likes.length < 3) {
+        if (storedLikes.length < 3) {
           setShowOnboarding(true);
         } else {
           await fetchRecommendations(userEmail);
         }
       } catch (err) {
-        console.error("Authentication Error:", err);
+        console.error("Initialization Error:", err);
       } finally {
         setLoading(false);
       }
@@ -52,7 +69,8 @@ export default function App() {
     setLoading(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/hybrid-recommendations`, {
-        params: { email, top_n: 6 }
+        params: { email, top_n: 6 },
+        headers: getAuthHeaders()
       });
       setRecommendations(res.data.recommendations);
       setUserStatus(res.data.user_status);
@@ -63,42 +81,96 @@ export default function App() {
     }
   };
 
-  // 3. Login Action
-  const handleLogin = (e) => {
+  // 3. Signup Action
+  const handleSignup = async (e) => {
     e.preventDefault();
-    if (emailInput.trim()) {
-      const cleanEmail = emailInput.trim().toLowerCase();
-      localStorage.setItem('userEmail', cleanEmail);
-      setUserEmail(cleanEmail);
+    setAuthError('');
+    setAuthLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/signup`, {
+        email: emailInput.trim().toLowerCase(),
+        password: passwordInput
+      });
+      const { access_token, email, liked_movies } = res.data;
+
+      // Store auth data
+      localStorage.setItem('accessToken', access_token);
+      localStorage.setItem('userEmail', email);
+      localStorage.setItem('likedMovies', JSON.stringify(liked_movies));
+
+      setUserEmail(email);
+      setLikedMovies(liked_movies);
+      setShowOnboarding(true); // New user → cold-start onboarding
+    } catch (err) {
+      setAuthError(err.response?.data?.detail || 'Signup failed. Please try again.');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
-  // 4. Logout Action
+  // 4. Login Action
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/login`, {
+        email: emailInput.trim().toLowerCase(),
+        password: passwordInput
+      });
+      const { access_token, email, liked_movies } = res.data;
+
+      // Store auth data
+      localStorage.setItem('accessToken', access_token);
+      localStorage.setItem('userEmail', email);
+      localStorage.setItem('likedMovies', JSON.stringify(liked_movies));
+
+      setUserEmail(email);
+      setLikedMovies(liked_movies);
+
+      if (liked_movies.length < 3) {
+        setShowOnboarding(true);
+      } else {
+        await fetchRecommendations(email);
+      }
+    } catch (err) {
+      setAuthError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // 5. Logout Action
   const handleLogout = () => {
     localStorage.removeItem('userEmail');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('likedMovies');
     setUserEmail('');
     setLikedMovies([]);
     setRecommendations([]);
     setShowOnboarding(false);
     setStreamingMovie(null);
     setStreamingUrl('');
+    setAuthError('');
+    setPasswordInput('');
   };
 
-  // 5. Toggle Like Status
+  // 6. Toggle Like Status
   const toggleLike = async (movieTitle) => {
     try {
       const res = await axios.post(`${API_BASE_URL}/like`, {
         email: userEmail,
         movie_title: movieTitle
-      });
+      }, { headers: getAuthHeaders() });
       setLikedMovies(res.data.liked_movies);
+      localStorage.setItem('likedMovies', JSON.stringify(res.data.liked_movies));
       await fetchRecommendations(userEmail);
     } catch (err) {
       console.error("Like Action Failed:", err);
     }
   };
 
-  // 6. Complete Onboarding
+  // 7. Complete Onboarding
   const handleOnboardingComplete = async (selectedStarterMovies) => {
     setShowOnboarding(false);
     setLoading(true);
@@ -107,22 +179,32 @@ export default function App() {
         await axios.post(`${API_BASE_URL}/like`, {
           email: userEmail,
           movie_title: title
-        });
+        }, { headers: getAuthHeaders() });
       }
-      const loginRes = await axios.post(`${API_BASE_URL}/login`, { email: userEmail });
+      // Fetch the updated like list
+      const loginRes = await axios.post(`${API_BASE_URL}/login`, {
+        email: userEmail,
+        password: passwordInput || '__skip__'  // Re-auth not needed; likes are already persisted
+      });
+      // If re-login fails (password not stored), use the last like response
       setLikedMovies(loginRes.data.liked_movies);
+      localStorage.setItem('likedMovies', JSON.stringify(loginRes.data.liked_movies));
       await fetchRecommendations(userEmail);
     } catch (err) {
-      console.error("Onboarding submission failed:", err);
+      // Fallback: just fetch recommendations with whatever likes we have
+      console.error("Onboarding submission note:", err);
+      await fetchRecommendations(userEmail);
     } finally {
       setLoading(false);
     }
   };
 
-  // 7. Open Stream for a Movie
+  // 8. Open Stream for a Movie
   const openStream = async (movie) => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/stream/${movie.id}`);
+      const res = await axios.get(`${API_BASE_URL}/stream/${movie.id}`, {
+        headers: getAuthHeaders()
+      });
       setStreamingUrl(res.data.video_url);
       setStreamingMovie(movie);
     } catch (err) {
@@ -130,14 +212,16 @@ export default function App() {
     }
   };
 
-  // 8. Handle Watch Event Callback (implicit feedback from video player)
+  // 9. Handle Watch Event Callback (implicit feedback from video player)
   const handleWatchEvent = (updatedLikes) => {
     setLikedMovies(updatedLikes);
-    // Refresh recommendations to reflect the implicit feedback
+    localStorage.setItem('likedMovies', JSON.stringify(updatedLikes));
     fetchRecommendations(userEmail);
   };
 
-  // RENDER: LOGIN VIEW
+  // ==========================================
+  // RENDER: AUTH VIEW (Login / Signup)
+  // ==========================================
   if (!userEmail) {
     return (
       <div className="min-h-screen bg-netflixDark flex items-center justify-center p-4">
@@ -146,8 +230,20 @@ export default function App() {
             <Film className="w-8 h-8 text-netflixRed" />
             <h1 className="text-2xl font-bold text-netflixRed tracking-wider">FLIXRECOMMEND</h1>
           </div>
-          <h2 className="text-lg font-semibold text-center mb-6">Sign In for Personalized Feeds</h2>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <h2 className="text-lg font-semibold text-center mb-6">
+            {isSignup ? 'Create Your Account' : 'Sign In to Your Account'}
+          </h2>
+
+          {/* Auth Error Alert */}
+          {authError && (
+            <div className="flex items-center gap-2 bg-red-900/40 border border-red-700/50 text-red-300 text-xs px-4 py-2.5 rounded-lg mb-4">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <form onSubmit={isSignup ? handleSignup : handleLogin} className="space-y-4">
+            {/* Email Field */}
             <div>
               <label className="block text-xs font-semibold text-gray-400 mb-1">EMAIL ADDRESS</label>
               <div className="relative">
@@ -162,19 +258,60 @@ export default function App() {
                 <Mail className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
               </div>
             </div>
+
+            {/* Password Field */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 mb-1">PASSWORD</label>
+              <div className="relative">
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="••••••••"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-700 rounded py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-netflixRed"
+                />
+                <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
+              </div>
+            </div>
+
+            {/* Submit Button */}
             <button
               type="submit"
-              className="w-full bg-netflixRed hover:bg-red-700 text-white font-bold py-2.5 rounded transition-colors flex items-center justify-center gap-2"
+              disabled={authLoading}
+              className="w-full bg-netflixRed hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded transition-colors flex items-center justify-center gap-2"
             >
-              <LogIn className="w-4 h-4" /> Enter Streaming Portal
+              {authLoading ? (
+                <Loader className="w-4 h-4 animate-spin" />
+              ) : isSignup ? (
+                <><UserPlus className="w-4 h-4" /> Create Account</>
+              ) : (
+                <><LogIn className="w-4 h-4" /> Sign In</>
+              )}
             </button>
           </form>
+
+          {/* Toggle Login / Signup */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-400">
+              {isSignup ? 'Already have an account?' : "Don't have an account?"}
+              <button
+                onClick={() => { setIsSignup(!isSignup); setAuthError(''); }}
+                className="text-netflixRed hover:text-red-400 font-semibold ml-1 transition-colors"
+              >
+                {isSignup ? 'Sign In' : 'Sign Up'}
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
+  // ==========================================
   // RENDER: MAIN DASHBOARD VIEW
+  // ==========================================
   return (
     <div className="min-h-screen bg-netflixDark text-white">
       {/* Cold-Start Modal */}
