@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { X, Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react';
 import axios from 'axios';
-
+import Hls from 'hls.js';
 const API_BASE_URL = "http://localhost:8000/api";
 
 export default function VideoPlayerModal({ movie, videoUrl, userEmail, onClose, onWatchEvent }) {
@@ -17,18 +17,68 @@ export default function VideoPlayerModal({ movie, videoUrl, userEmail, onClose, 
   const [watchEventSent, setWatchEventSent] = useState(false);
   const controlsTimerRef = useRef(null);
 
-  // Auto-play on mount
-  useEffect(() => {
-    const video = videoRef.current;
+// Auto-play on mount & HLS stream setup
+useEffect(() => {
+  const video = videoRef.current;
+  if (!video || !videoUrl) return;
+
+  let hls = null;
+
+  // Helper to attempt play safely
+  const attemptPlay = () => {
+    video.play()
+      .then(() => setIsPlaying(true))
+      .catch((err) => {
+        // Autoplay was likely blocked by browser policies
+        console.warn('Autoplay blocked:', err);
+        setIsPlaying(false);
+      });
+  };
+
+  // Handler for native Safari metadata loaded
+  const handleLoadedMetadata = () => {
+    attemptPlay();
+  };
+
+  if (Hls.isSupported() && videoUrl.includes('.m3u8')) {
+    hls = new Hls({
+      autoStartLoad: true,
+    });
+    hls.loadSource(videoUrl);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      attemptPlay();
+    });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari / iOS Native HLS
+    video.src = videoUrl;
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+  } else {
+    // Fallback for MP4 / WebM
+    video.src = videoUrl;
+    attemptPlay();
+  }
+
+  // Prevent body scroll while modal is open
+  document.body.style.overflow = 'hidden';
+
+  return () => {
+    // Restore body scroll
+    document.body.style.overflow = '';
+
+    // Stop playback and remove listeners
     if (video) {
-      video.play().then(() => setIsPlaying(true)).catch(() => {});
+      video.pause();
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeAttribute('src'); // Free memory
+      video.load();
     }
-    // Prevent body scroll while modal is open
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
+
+    if (hls) {
+      hls.destroy();
+    }
+  };
+}, [videoUrl]);
 
   // Hide controls after 3 seconds of inactivity
   const resetControlsTimer = useCallback(() => {
@@ -176,7 +226,6 @@ export default function VideoPlayerModal({ movie, videoUrl, userEmail, onClose, 
         {/* Video Element */}
         <video
           ref={videoRef}
-          src={videoUrl}
           className="w-full aspect-video bg-black cursor-pointer"
           onClick={togglePlay}
           onTimeUpdate={handleTimeUpdate}
