@@ -1,165 +1,109 @@
-# Movie Recommendation System
+# FlixRecommend Frontend
 
-A full-stack movie recommendation app that combines content-based filtering, collaborative filtering, and user profile tracking to suggest movies based on a user's likes and viewing behavior.
+The React frontend for a movie discovery app. Users can create an account, choose starter movies to establish their taste profile, browse personalized recommendations, like or unlike movies, and watch available streams in an HLS-capable video player.
 
-## Overview
+## Features
 
-This project contains:
-
-- A FastAPI backend for authentication, recommendation logic, and movie streaming metadata
-- A React + Vite frontend for browsing movies and viewing recommendations
-- A PostgreSQL/Supabase data layer for user accounts and liked movies
-- A hybrid recommendation engine using:
-  - content similarity based on movie metadata
-  - collaborative filtering with SVD
-  - user watch percentage signals to update taste profiles
+- Email and password sign-up and login
+- First-time onboarding with starter movie selections
+- Hybrid recommendations loaded from the FastAPI backend
+- Like and unlike actions that refresh the recommendation feed
+- HLS, MP4, and WebM playback with play, pause, seek, mute, and fullscreen controls
+- Watch-progress tracking: viewing at least 50% of a movie sends implicit feedback to the backend
+- JWT and profile data persisted in browser `localStorage`
 
 ## Tech Stack
 
-### Backend
-- Python
-- FastAPI
-- SQLAlchemy
-- PostgreSQL / Supabase
-- JWT authentication
-- scikit-learn
-- pandas / NumPy
-- bcrypt
+- React 19
+- Vite 8
+- Tailwind CSS 3
+- Axios for API requests
+- Hls.js for browser HLS playback
+- lucide-react for icons
 
-### Frontend
-- React
-- Vite
-- Tailwind CSS
-- Axios
-- HLS.js for streaming playback
+## Requirements
+
+- Node.js 18 or newer
+- npm
+- A running instance of the companion FastAPI backend at `http://localhost:8000`
+
+## Getting Started
+
+From this directory:
+
+```bash
+npm install
+npm run dev
+```
+
+Open the URL printed by Vite, usually `http://localhost:5173`.
+
+The API base URL is currently defined in `src/App.jsx` and `src/components/VideoPlayerModal.jsx` as:
+
+```text
+http://localhost:8000/api
+```
+
+Start the backend separately before signing in. The frontend does not include the backend, database, recommendation model, or movie data in this repository.
+
+## Available Scripts
+
+| Command           | Description                          |
+| ----------------- | ------------------------------------ |
+| `npm run dev`     | Start the Vite development server    |
+| `npm run build`   | Create a production build in `dist/` |
+| `npm run preview` | Preview the production build locally |
+| `npm run lint`    | Run ESLint                           |
+
+## Backend API Contract
+
+The frontend expects the backend to expose these routes under `/api`:
+
+| Method | Route                     | Purpose                                                     |
+| ------ | ------------------------- | ----------------------------------------------------------- |
+| `POST` | `/signup`                 | Create an account and return a JWT, email, and liked movies |
+| `POST` | `/login`                  | Authenticate and return a JWT, email, and liked movies      |
+| `POST` | `/like`                   | Add or remove a movie from the user’s liked movies          |
+| `GET`  | `/hybrid-recommendations` | Return personalized recommendations for an email            |
+| `GET`  | `/stream/{movie_id}`      | Return a playable `video_url`                               |
+| `POST` | `/watch-event`            | Record watch progress and return updated likes              |
+
+Authenticated requests send the stored JWT as a bearer token. Recommendation requests include `email` and `top_n=6`; like and watch requests include the user email and movie details in the JSON body.
 
 ## Project Structure
 
 ```text
-Movie Recommendation System/
-├── Backend/
-│   ├── database.py
-│   ├── main.py
-│   ├── requirements.txt
-│   ├── .env
-│   └── recommendation/
-│       └── virtual environment files
-├── Frontend/
-│   └── movie-recommendation/
-│       ├── src/
-│       ├── public/
-│       ├── package.json
-│       ├── vite.config.js
-│       └── README.md
-└── README.md (this project documentation)
+movie-recommendation/
+├── public/                        # Static assets
+├── src/
+│   ├── components/
+│   │   ├── OnboardingModal.jsx    # Starter movie taste setup
+│   │   └── VideoPlayerModal.jsx   # HLS and HTML5 video player
+│   ├── App.jsx                    # Auth, feed, likes, and stream orchestration
+│   ├── index.css                  # Global styles and Tailwind layers
+│   └── main.jsx                   # React entry point
+├── index.html
+├── package.json
+├── tailwind.config.js
+└── vite.config.js
 ```
 
-## Prerequisites
+## Local Storage
 
-- Python 3.11+
-- Node.js 18+
-- npm
-- A PostgreSQL database connection string for Supabase or another compatible service
+After authentication, the app stores these values in the browser:
 
-## Backend Setup
+- `accessToken`: JWT used for authenticated API requests
+- `userEmail`: current signed-in user
+- `likedMovies`: cached liked movie list used during initialization
 
-1. Open a terminal in the Backend folder.
-2. Create and activate a virtual environment if needed.
-3. Install dependencies:
+Use the in-app logout action to clear this data. During development, clear the site’s local storage if testing a fresh onboarding flow.
 
-```bash
-pip install -r requirements.txt
-```
+## Troubleshooting
 
-4. Create a `.env` file inside the Backend folder with:
-
-```env
-DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<database>
-SUPER_SECRET_KEY=your-secure-secret-key
-```
-
-5. Start the API server:
-
-```bash
-python -m uvicorn main:app --reload --port 8000
-```
-
-The API will run at:
-
-```text
-http://localhost:8000
-```
-
-## Frontend Setup
-
-1. Open a terminal in the Frontend/movie-recommendation directory.
-2. Install dependencies:
-
-```bash
-npm install
-```
-
-3. Run the app:
-
-```bash
-npm run dev
-```
-
-The frontend will usually run at:
-
-```text
-http://localhost:5173
-```
-
-## Key API Features
-
-### Authentication
-- `POST /api/signup`
-- `POST /api/login`
-
-### User likes
-- `POST /api/like`
-
-### Recommendations
-- `GET /api/hybrid-recommendations?email=<email>&top_n=6&weight_a=0.5`
-
-### Movie streaming
-- `GET /api/stream/{movie_id}`
-
-### Watch tracking
-- `POST /api/watch-event`
-
-## Recommendation Flow
-
-1. User signs up or logs in.
-2. Likes are stored in the database and synced to an in-memory profile cache.
-3. The app computes:
-   - content-based similarity using TF-IDF metadata
-   - collaborative scores using SVD prediction
-4. These scores are normalized and combined into a hybrid recommendation result.
-5. If a user watches more than 50% of a movie, it is added to their taste profile automatically.
-
-## Notes
-
-- The backend uses CORS so the frontend can call API routes during local development.
-- Sample movie stream URLs are configured in the backend for demo functionality.
-- In production, replace the demo stream URLs with secure cloud-hosted media endpoints.
-
-## Useful Commands
-
-Backend:
-```bash
-cd Backend
-python -m uvicorn main:app --reload --port 8000
-```
-
-Frontend:
-```bash
-cd Frontend/movie-recommendation
-npm install
-npm run dev
-```
+- **Requests fail or recommendations stay empty:** verify that the backend is running on port `8000` and that its CORS configuration allows the Vite origin.
+- **Video does not play:** verify that `/api/stream/{movie_id}` returns a reachable `video_url`; HLS URLs should end in `.m3u8`.
+- **Changes are not visible after editing:** restart Vite or run `npm run build` to check the production bundle.
 
 ## License
 
-This project is for educational/demo use unless otherwise specified by the repository owner.
+This project is intended for educational and demonstration use unless otherwise specified by the repository owner.
