@@ -31,6 +31,38 @@ export default function App() {
   const [streamingMovie, setStreamingMovie] = useState(null);
   const [streamingUrl, setStreamingUrl] = useState('');
 
+  // Fetch Hybrid Recommendations from FastAPI
+  const fetchRecommendations = async (email) => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/hybrid-recommendations`, {
+        params: { email, top_n: 6 },
+        headers: getAuthHeaders()
+      });
+      setRecommendations(res.data.recommendations);
+      setUserStatus(res.data.user_status);
+    } catch (err) {
+      console.error("Error fetching recommendations:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Logout Action
+  const handleLogout = () => {
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('likedMovies');
+    setUserEmail('');
+    setLikedMovies([]);
+    setRecommendations([]);
+    setShowOnboarding(false);
+    setStreamingMovie(null);
+    setStreamingUrl('');
+    setAuthError('');
+    setPasswordInput('');
+  };
+
   // 1. On mount/reload: if we have a stored email+token, load profile from backend
   useEffect(() => {
     if (!userEmail) return;
@@ -63,23 +95,6 @@ export default function App() {
 
     initializeUser();
   }, [userEmail]);
-
-  // 2. Fetch Hybrid Recommendations from FastAPI
-  const fetchRecommendations = async (email) => {
-    setLoading(true);
-    try {
-      const res = await axios.get(`${API_BASE_URL}/hybrid-recommendations`, {
-        params: { email, top_n: 6 },
-        headers: getAuthHeaders()
-      });
-      setRecommendations(res.data.recommendations);
-      setUserStatus(res.data.user_status);
-    } catch (err) {
-      console.error("Error fetching recommendations:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // 3. Signup Action
   const handleSignup = async (e) => {
@@ -138,21 +153,6 @@ export default function App() {
     } finally {
       setAuthLoading(false);
     }
-  };
-
-  // 5. Logout Action
-  const handleLogout = () => {
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('likedMovies');
-    setUserEmail('');
-    setLikedMovies([]);
-    setRecommendations([]);
-    setShowOnboarding(false);
-    setStreamingMovie(null);
-    setStreamingUrl('');
-    setAuthError('');
-    setPasswordInput('');
   };
 
   // 6. Toggle Like Status
