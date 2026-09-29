@@ -14,7 +14,52 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userStatus, setUserStatus] = useState('');
 
+<<<<<<< HEAD
   // 1. Synchronize Profile Data on Login or Reload
+=======
+  // Auth state
+  const [isSignup, setIsSignup] = useState(false);        // Toggle between login/signup
+  const [authError, setAuthError] = useState('');          // Auth error message
+  const [authLoading, setAuthLoading] = useState(false);   // Auth button loading
+
+  // Streaming state
+  const [streamingMovie, setStreamingMovie] = useState(null);
+  const [streamingUrl, setStreamingUrl] = useState('');
+
+  // Fetch Hybrid Recommendations from FastAPI
+  const fetchRecommendations = async (email) => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/hybrid-recommendations`, {
+        params: { email, top_n: 6 },
+        headers: getAuthHeaders()
+      });
+      setRecommendations(res.data.recommendations);
+      setUserStatus(res.data.user_status);
+    } catch (err) {
+      console.error("Error fetching recommendations:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Logout Action
+  const handleLogout = () => {
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('likedMovies');
+    setUserEmail('');
+    setLikedMovies([]);
+    setRecommendations([]);
+    setShowOnboarding(false);
+    setStreamingMovie(null);
+    setStreamingUrl('');
+    setAuthError('');
+    setPasswordInput('');
+  };
+
+  // 1. On mount/reload: if we have a stored email+token, load profile from backend
+>>>>>>> 61cc50444b4d9fcff0f823dd61ef65c912d24e6e
   useEffect(() => {
     if (!userEmail) return;
 
@@ -42,6 +87,7 @@ export default function App() {
     initializeUser();
   }, [userEmail]);
 
+<<<<<<< HEAD
   // 2. Fetch Hybrid Recommendations from FastAPI
   const fetchRecommendations = async (email) => {
     setLoading(true);
@@ -60,6 +106,10 @@ export default function App() {
 
   // 3. Login Action
   const handleLogin = (e) => {
+=======
+  // 3. Signup Action
+  const handleSignup = async (e) => {
+>>>>>>> 61cc50444b4d9fcff0f823dd61ef65c912d24e6e
     e.preventDefault();
     if (emailInput.trim()) {
       const cleanEmail = emailInput.trim().toLowerCase();
@@ -68,6 +118,7 @@ export default function App() {
     }
   };
 
+<<<<<<< HEAD
   // 4. Logout Action
   const handleLogout = () => {
     localStorage.removeItem('userEmail');
@@ -78,6 +129,41 @@ export default function App() {
   };
 
   // 5. Toggle Like Status
+=======
+  // 4. Login Action
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/login`, {
+        email: emailInput.trim().toLowerCase(),
+        password: passwordInput
+      });
+      const { access_token, email, liked_movies } = res.data;
+
+      // Store auth data
+      localStorage.setItem('accessToken', access_token);
+      localStorage.setItem('userEmail', email);
+      localStorage.setItem('likedMovies', JSON.stringify(liked_movies));
+
+      setUserEmail(email);
+      setLikedMovies(liked_movies);
+
+      if (liked_movies.length < 3) {
+        setShowOnboarding(true);
+      } else {
+        await fetchRecommendations(email);
+      }
+    } catch (err) {
+      setAuthError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // 6. Toggle Like Status
+>>>>>>> 61cc50444b4d9fcff0f823dd61ef65c912d24e6e
   const toggleLike = async (movieTitle) => {
     try {
       const res = await axios.post(`${API_BASE_URL}/like`, {
