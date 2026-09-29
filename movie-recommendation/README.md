@@ -1,165 +1,96 @@
-# Movie Recommendation System
+# FlixRecommend
 
-A full-stack movie recommendation app that combines content-based filtering, collaborative filtering, and user profile tracking to suggest movies based on a user's likes and viewing behavior.
+FlixRecommend is a full-stack movie recommendation system. Users sign in with an email address, select movies they like, and receive a personalized feed based on a hybrid content and collaborative filtering model.
 
-## Overview
+## Features
 
-This project contains:
-
-- A FastAPI backend for authentication, recommendation logic, and movie streaming metadata
-- A React + Vite frontend for browsing movies and viewing recommendations
-- A PostgreSQL/Supabase data layer for user accounts and liked movies
-- A hybrid recommendation engine using:
-  - content similarity based on movie metadata
-  - collaborative filtering with SVD
-  - user watch percentage signals to update taste profiles
-
-## Tech Stack
-
-### Backend
-- Python
-- FastAPI
-- SQLAlchemy
-- PostgreSQL / Supabase
-- JWT authentication
-- scikit-learn
-- pandas / NumPy
-- bcrypt
-
-### Frontend
-- React
-- Vite
-- Tailwind CSS
-- Axios
-- HLS.js for streaming playback
+- Email-based profile creation with local session persistence
+- First-use onboarding with starter movie selections
+- Hybrid recommendations combining TF-IDF content similarity and collaborative filtering
+- Separate content, collaborative, and combined match scores
+- Like and unlike actions that refresh the recommendation feed
+- FastAPI backend with local-development CORS
 
 ## Project Structure
 
 ```text
-Movie Recommendation System/
-├── Backend/
-│   ├── database.py
-│   ├── main.py
-│   ├── requirements.txt
-│   ├── .env
-│   └── recommendation/
-│       └── virtual environment files
-├── Frontend/
-│   └── movie-recommendation/
-│       ├── src/
-│       ├── public/
-│       ├── package.json
-│       ├── vite.config.js
-│       └── README.md
-└── README.md (this project documentation)
+.
+|-- Backend/
+|   |-- main.py
+|   |-- database.py
+|   |-- requirements.txt
+|   |-- movies_data.pkl
+|   |-- similarity_matrix.pkl
+|   `-- svd_collaborative_model.pkl
+`-- Frontend/movie-recommendation/
+	|-- src/App.jsx
+	|-- src/components/OnboardingModal.jsx
+	`-- package.json
 ```
 
-## Prerequisites
+The model files in `Backend/` are required when the API starts. They are loaded relative to `main.py`.
 
-- Python 3.11+
-- Node.js 18+
-- npm
-- A PostgreSQL database connection string for Supabase or another compatible service
+## Requirements
 
-## Backend Setup
+- Python 3.13 or a compatible Python version supported by the backend dependencies
+- Node.js and npm
+- The serialized model files listed above
 
-1. Open a terminal in the Backend folder.
-2. Create and activate a virtual environment if needed.
-3. Install dependencies:
+## Run Locally
 
-```bash
+Open two terminals from the repository root.
+
+### Start the backend
+
+```powershell
+cd Backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-4. Create a `.env` file inside the Backend folder with:
-
-```env
-DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<database>
-SUPER_SECRET_KEY=your-secure-secret-key
-```
-
-5. Start the API server:
-
-```bash
 python -m uvicorn main:app --reload --port 8000
 ```
 
-The API will run at:
+The API is available at `http://localhost:8000`, with interactive documentation at `http://localhost:8000/docs`.
 
-```text
-http://localhost:8000
-```
+### Start the frontend
 
-## Frontend Setup
-
-1. Open a terminal in the Frontend/movie-recommendation directory.
-2. Install dependencies:
-
-```bash
+```powershell
+cd Frontend\movie-recommendation
 npm install
-```
-
-3. Run the app:
-
-```bash
 npm run dev
 ```
 
-The frontend will usually run at:
+Open the local URL printed by Vite, usually `http://localhost:5173`.
+
+The frontend uses `http://localhost:8000/api` as a fixed API base URL. Start the backend on port `8000` unless you update `API_BASE_URL` in `src/App.jsx`.
+
+## API Endpoints
+
+- `POST /api/login` creates or loads a profile by email.
+- `POST /api/like` toggles a movie in the user's liked list.
+- `GET /api/hybrid-recommendations` returns personalized recommendations.
+
+Example request:
 
 ```text
-http://localhost:5173
+GET /api/hybrid-recommendations?email=name@example.com&top_n=6&weight_a=0.5
 ```
 
-## Key API Features
+`weight_a` controls the content-similarity weight. The collaborative-filtering weight is `1 - weight_a`.
 
-### Authentication
-- `POST /api/signup`
-- `POST /api/login`
+## Frontend Scripts
 
-### User likes
-- `POST /api/like`
+Run these commands from `Frontend/movie-recommendation`:
 
-### Recommendations
-- `GET /api/hybrid-recommendations?email=<email>&top_n=6&weight_a=0.5`
-
-### Movie streaming
-- `GET /api/stream/{movie_id}`
-
-### Watch tracking
-- `POST /api/watch-event`
-
-## Recommendation Flow
-
-1. User signs up or logs in.
-2. Likes are stored in the database and synced to an in-memory profile cache.
-3. The app computes:
-   - content-based similarity using TF-IDF metadata
-   - collaborative scores using SVD prediction
-4. These scores are normalized and combined into a hybrid recommendation result.
-5. If a user watches more than 50% of a movie, it is added to their taste profile automatically.
+```bash
+npm run dev      # Start the Vite development server
+npm run build    # Create a production build
+npm run preview  # Preview the production build
+npm run lint     # Run ESLint
+```
 
 ## Notes
 
-- The backend uses CORS so the frontend can call API routes during local development.
-- Sample movie stream URLs are configured in the backend for demo functionality.
-- In production, replace the demo stream URLs with secure cloud-hosted media endpoints.
-
-## Useful Commands
-
-Backend:
-```bash
-cd Backend
-python -m uvicorn main:app --reload --port 8000
-```
-
-Frontend:
-```bash
-cd Frontend/movie-recommendation
-npm install
-npm run dev
-```
-
-## License
-
-This project is for educational/demo use unless otherwise specified by the repository owner.
+- User likes are stored in memory by the backend and reset whenever the API process restarts.
+- The frontend stores only the current email in browser `localStorage`.
+- The backend's permissive CORS policy is intended for local development and should be restricted before production deployment.
