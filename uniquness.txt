@@ -1,0 +1,27 @@
+Top ideas to add in this project:-
+1.ad based revenue model
+2.social collaborative 
+3.bot assistant in my app
+
+ // Client-side regex validation
+  const validateInputs = () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // Password regex: Minimum 8 characters, at least 1 letter and 1 number
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+
+    if (!emailRegex.test(emailInput.trim())) {
+      return "Invalid email format. Please enter a valid email address.";
+    }
+    if (!passwordRegex.test(passwordInput)) {
+      return "Password must be at least 8 characters long, including at least one letter and one number.";
+    }
+    return null;
+  };
+
+
+    const validationMsg = validateInputs();
+    if (validationMsg) {
+      setPopupError(validationMsg);
+      setTimeout(() => setPopupError(''), 4000); // Auto-hide after 4 seconds
+      return;
+    }

@@ -5,8 +5,13 @@ import OnboardingModal from './components/OnboardingModal';
 
 const API_BASE_URL = "http://localhost:8000/api";
 
+const getAuthHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}`
+});
+
 export default function App() {
   const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || '');
   const [likedMovies, setLikedMovies] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
@@ -18,6 +23,7 @@ export default function App() {
   const [isSignup, setIsSignup] = useState(false);        // Toggle between login/signup
   const [authError, setAuthError] = useState('');          // Auth error message
   const [authLoading, setAuthLoading] = useState(false);   // Auth button loading
+  const [popupError, setPopupError] = useState('');        // Popup validation error
 
   // Streaming state
   const [streamingMovie, setStreamingMovie] = useState(null);
@@ -62,9 +68,7 @@ export default function App() {
     const initializeUser = async () => {
       setLoading(true);
       try {
-        // Authenticate / fetch saved profile
-        const loginRes = await axios.post(`${API_BASE_URL}/login`, { email: userEmail });
-        const likes = loginRes.data.liked_movies || [];
+        const likes = JSON.parse(localStorage.getItem('likedMovies') || '[]');
         setLikedMovies(likes);
 
         // Check for Cold-Start (fewer than 3 movies liked)
@@ -83,19 +87,59 @@ export default function App() {
     initializeUser();
   }, [userEmail]);
 
+  // Client-side regex validation
+   const validateInputs = () =>{
+   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // Password regex: Minimum 8 characters, at least 1 letter and 1 number
+  const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+  if(!emailRegex.test(emailInput.trim())){
+    return "Invalid email format. Please enter a valid email address.";
+  }
+  if(!passwordRegex.test(passwordInput)){
+    return "Password must be at least 8 characters long, including at least one letter and one number.";
+  }
+  return null;
+} 
+
   // 3. Signup Action
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (emailInput.trim()) {
-      const cleanEmail = emailInput.trim().toLowerCase();
-      localStorage.setItem('userEmail', cleanEmail);
-      setUserEmail(cleanEmail);
+    const validationMsg = validateInputs();
+    if(validationMsg){
+      setPopupError(validationMsg);
+      setTimeout(() => 
+        setPopupError(''), 4000);
+    }
+    setAuthError('');
+    setAuthLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/signup`, {
+        email: emailInput.trim().toLowerCase(),
+        password: passwordInput
+      });
+      localStorage.setItem('accessToken', res.data.access_token);
+      localStorage.setItem('userEmail', res.data.email);
+      localStorage.setItem('likedMovies', JSON.stringify(res.data.liked_movies));
+      setUserEmail(res.data.email);
+      setLikedMovies(res.data.liked_movies);
+      setShowOnboarding(true);
+    } catch (err) {
+      setAuthError(err.response?.data?.detail || 'Signup failed.');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
   // 4. Login Action
   const handleLogin = async (e) => {
     e.preventDefault();
+    const validationMsg = validateInputs();
+    if (validationMsg) {
+      setPopupError(validationMsg);
+      setTimeout(() => setPopupError(''), 4000);
+      return;
+    }
+
     setAuthError('');
     setAuthLoading(true);
     try {
@@ -112,12 +156,7 @@ export default function App() {
 
       setUserEmail(email);
       setLikedMovies(liked_movies);
-
-      if (liked_movies.length < 3) {
-        setShowOnboarding(true);
-      } else {
-        await fetchRecommendations(email);
-      }
+      await fetchRecommendations(email); 
     } catch (err) {
       setAuthError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
     } finally {
@@ -131,8 +170,9 @@ export default function App() {
       const res = await axios.post(`${API_BASE_URL}/like`, {
         email: userEmail,
         movie_title: movieTitle
-      });
+      }, { headers: getAuthHeaders() });
       setLikedMovies(res.data.liked_movies);
+      localStorage.setItem('likedMovies', JSON.stringify(res.data.liked_movies));
       await fetchRecommendations(userEmail);
     } catch (err) {
       console.error("Like Action Failed:", err);
@@ -148,10 +188,11 @@ export default function App() {
         await axios.post(`${API_BASE_URL}/like`, {
           email: userEmail,
           movie_title: title
-        });
+        }, { headers: getAuthHeaders() });
       }
-      const loginRes = await axios.post(`${API_BASE_URL}/login`, { email: userEmail });
-      setLikedMovies(loginRes.data.liked_movies);
+      const updatedLikes = [...new Set([...likedMovies, ...selectedStarterMovies])];
+      setLikedMovies(updatedLikes);
+      localStorage.setItem('likedMovies', JSON.stringify(updatedLikes));
       await fetchRecommendations(userEmail);
     } catch (err) {
       console.error("Onboarding submission failed:", err);
@@ -163,14 +204,25 @@ export default function App() {
   // RENDER: LOGIN VIEW
   if (!userEmail) {
     return (
-      <div className="min-h-screen bg-netflixDark flex items-center justify-center p-4">
-        <div className="bg-netflixCard p-8 rounded-xl border border-gray-800 max-w-md w-full shadow-2xl">
+      <div className="min-h-screen bg-netflixDark flex items-center justify-center p-4 relative">
+        
+        {/* Popup Validation Error Toast */}
+        {popupError && (
+          <div className="absolute top-10 left-1/2 transform -translate-x-1/2 z-50 bg-red-600 border border-red-500 text-white px-6 py-3 rounded shadow-2xl flex items-center gap-4 transition-opacity duration-300">
+            <span className="text-sm font-medium">{popupError}</span>
+            <button onClick={() => setPopupError('')} className="text-xl font-bold hover:text-gray-300 leading-none">×</button>
+          </div>
+        )}
+
+        <div className="bg-netflixCard p-8 rounded-xl border border-gray-800 max-w-md w-full shadow-2xl mt-4">
           <div className="flex items-center justify-center space-x-2 mb-6">
             <Film className="w-8 h-8 text-netflixRed" />
             <h1 className="text-2xl font-bold text-netflixRed tracking-wider">FLIXRECOMMEND</h1>
           </div>
-          <h2 className="text-lg font-semibold text-center mb-6">Sign In for Personalized Feeds</h2>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <h2 className="text-lg font-semibold text-center mb-6">
+            {isSignup ? 'Create Your Account' : 'Sign In for Personalized Feeds'}
+          </h2>
+          <form onSubmit={isSignup ? handleSignup : handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-gray-400 mb-1">EMAIL ADDRESS</label>
               <div className="relative">
@@ -185,11 +237,30 @@ export default function App() {
                 <Mail className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
               </div>
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 mb-1">PASSWORD</label>
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-700 rounded py-2.5 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-netflixRed"
+              />
+            </div>
+            {authError && <p className="text-sm text-red-400">{authError}</p>}
             <button
               type="submit"
               className="w-full bg-netflixRed hover:bg-red-700 text-white font-bold py-2.5 rounded transition-colors flex items-center justify-center gap-2"
             >
-              <LogIn className="w-4 h-4" /> Enter Streaming Portal
+              <LogIn className="w-4 h-4" /> {isSignup ? 'Create Account' : 'Enter Streaming Portal'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsSignup(!isSignup); setAuthError(''); }}
+              className="w-full text-sm text-gray-400 hover:text-white"
+            >
+              {isSignup ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
             </button>
           </form>
         </div>

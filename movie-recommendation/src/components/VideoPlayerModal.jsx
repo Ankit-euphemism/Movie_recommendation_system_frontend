@@ -106,6 +106,10 @@ useEffect(() => {
           email: userEmail,
           movie_title: movie.title,
           watched_percentage: percentage
+        }, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}`
+          }
         });
         if (onWatchEvent) onWatchEvent(res.data.updated_likes);
       } catch (err) {
