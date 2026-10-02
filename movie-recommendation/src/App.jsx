@@ -87,16 +87,11 @@ export default function App() {
     initializeUser();
   }, [userEmail]);
 
-  // Client-side regex validation
+  // Client-side input validation
    const validateInputs = () =>{
    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  // Password regex: Minimum 8 characters, at least 1 letter and 1 number
-  const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
   if(!emailRegex.test(emailInput.trim())){
     return "Invalid email format. Please enter a valid email address.";
-  }
-  if(!passwordRegex.test(passwordInput)){
-    return "Password must be at least 8 characters long, including at least one letter and one number.";
   }
   return null;
 } 
