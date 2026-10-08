@@ -30,3 +30,6 @@ PROJECT_SYNOPSIS_Frontend.docx
 .env
 .env.*
 !.env.example
+
+# extra folders
+movie-recommendation/*
