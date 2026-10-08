@@ -32,4 +32,4 @@ PROJECT_SYNOPSIS_Frontend.docx
 !.env.example
 
 # extra folders
-movie-recommendation/*
+movie-recommendation/
