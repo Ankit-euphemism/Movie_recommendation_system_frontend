@@ -69,7 +69,7 @@ The frontend sends requests to `http://localhost:8000/api`. When the API respond
 
 For authenticated endpoints, the frontend supplies the value stored as `accessToken` in a Bearer authorization header. Configure the backend's CORS policy to allow `http://localhost:5173` (or the origin hosting this frontend).
 
-> The API base URL is currently defined in `src/App.jsx` and `src/components/VideoPlayerModal.jsx`. Change those values if your service runs elsewhere.
+> The API base URL is defined in `src/utils/api.js` and can be overridden with `VITE_API_URL`.
 
 ## Browser Storage
 

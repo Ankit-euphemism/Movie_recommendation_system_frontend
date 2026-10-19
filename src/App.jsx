@@ -8,7 +8,6 @@ import HeroBanner from './components/HeroBanner';
 import MovieCard from './components/MovieCard';
 import MovieDetailModal from './components/MovieDetailModal';
 import SearchDiscovery from './components/SearchDiscovery';
-import AdminDashboard from './components/AdminDashboard';
 import AuthModal from './components/AuthModal';
 import TasteProfileModal from './components/TasteProfileModal';
 import OnboardingModal from './components/OnboardingModal';
@@ -18,63 +17,22 @@ import {
   generateClientRecommendations,
   DEMO_STREAMS,
 } from './utils/recommender';
-
-const API_BASE_URL = "http://localhost:8000/api";
-
-const getAuthHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}`
-});
+import { API_BASE_URL, getAuthHeaders } from './utils/api';
 
 export default function App() {
-  // Master Catalog (supports admin additions/modifications)
-  const [allMovies, setAllMovies] = useState(() => {
-    try {
-      const saved = localStorage.getItem('customMoviesCatalog');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn("Could not load custom catalog:", e);
-    }
-    return initialMoviesCatalog;
-  });
-
-  // User & Auth State
+  const allMovies = initialMoviesCatalog;
   const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || '');
-  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || 'user');
-  const [likedMovies, setLikedMovies] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('likedMovies') || '[]');
-    } catch (err) {
-      void err;
-      return [];
-    }
-  });
+  const [likedMovies, setLikedMovies] = useState([]);
 
-  // Users Directory (for Admin Inspection)
-  const [usersList, setUsersList] = useState(() => {
-    try {
-      const saved = localStorage.getItem('usersDirectory');
-      if (saved) return JSON.parse(saved);
-    } catch (err) {
-      void err;
-    }
-    return [
-      { email: 'admin@flixrecommend.com', role: 'admin', liked_movies: ['Avatar', 'Inception', 'Interstellar'] },
-      { email: 'demo.user@flixrecommend.com', role: 'user', liked_movies: ['The Dark Knight Rises', 'Gladiator'] },
-    ];
-  });
-
-  // Active View State: 'home' | 'search' | 'admin'
-  const [activeView, setActiveView] = useState(() => {
-    const role = localStorage.getItem('userRole') || 'user';
-    return role === 'admin' ? 'admin' : 'home';
-  });
+  // Active View State: 'home' | 'search'
+  const [activeView, setActiveView] = useState('home');
 
   // Search Query for quick jump
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
   // Recommender State
   const [recommendations, setRecommendations] = useState([]);
-  const [hybridWeight, setHybridWeight] = useState(0.5); // Approach A vs Approach B
+  const hybridWeight = 0.5;
   const [loading, setLoading] = useState(false);
   const [userStatus, setUserStatus] = useState('Hybrid Active');
 
@@ -85,50 +43,12 @@ export default function App() {
   const [showTasteProfile, setShowTasteProfile] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // System Audit Logs
-  const [auditLogs, setAuditLogs] = useState(() => {
-    try {
-      const saved = localStorage.getItem('systemAuditLogs');
-      if (saved) return JSON.parse(saved);
-    } catch (err) {
-      void err;
-    }
-    return [
-      { time: '14:00', message: 'Recommender engine initialized with TF-IDF similarity & SVD model.' },
-      { time: '14:05', message: 'Catalog loaded with 4,803 TMDB movies.' },
-    ];
-  });
-
-  const addAuditLog = useCallback((message) => {
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-    setAuditLogs((prev) => {
-      const next = [{ time: timeStr, message }, ...prev.slice(0, 49)];
-      try {
-        localStorage.setItem('systemAuditLogs', JSON.stringify(next));
-      } catch (err) {
-        void err;
-      }
-      return next;
-    });
-  }, []);
-
-  // Update Catalog Handler (Admin)
-  const handleUpdateMovies = useCallback((newCatalog) => {
-    setAllMovies(newCatalog);
-    try {
-      localStorage.setItem('customMoviesCatalog', JSON.stringify(newCatalog));
-    } catch (e) {
-      console.warn("Storage quota exceeded:", e);
-    }
-  }, []);
-
   // Recommender Fetcher (Combines FastAPI ML response with rich frontend metadata)
   const fetchRecommendations = useCallback(async (email, currentLikes = likedMovies) => {
     setLoading(true);
     let backendSuccess = false;
 
-    try {
+   try {
       const res = await axios.get(`${API_BASE_URL}/hybrid-recommendations`, {
         params: { email, top_n: 12, weight_a: hybridWeight },
         headers: getAuthHeaders(),
@@ -147,7 +67,6 @@ export default function App() {
         });
         setRecommendations(enriched);
         setUserStatus('Backend ML Active (Postgres + SVD)');
-        addAuditLog(`Generated hybrid recommendations via FastAPI backend for ${email}`);
       }
     } catch (err) {
       console.warn("FastAPI backend not reached or empty profile. Using resilient client hybrid engine:", err.message);
@@ -161,13 +80,13 @@ export default function App() {
     }
 
     setLoading(false);
-  }, [allMovies, hybridWeight, likedMovies, addAuditLog]);
+  }, [allMovies, hybridWeight, likedMovies]);
 
   // Initial user setup
   useEffect(() => {
     if (!userEmail) return;
 
-    if (likedMovies.length === 0 && userRole !== 'admin') {
+    if (likedMovies.length === 0) {
       const timer = setTimeout(() => setShowOnboarding(true), 10);
       return () => clearTimeout(timer);
     } else {
@@ -176,7 +95,7 @@ export default function App() {
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [userEmail, likedMovies, userRole, fetchRecommendations]);
+  }, [userEmail, likedMovies, fetchRecommendations]);
 
   // Toggle Like Handler
   const toggleLike = async (movieTitle) => {
@@ -187,19 +106,6 @@ export default function App() {
 
     setLikedMovies(newLikes);
     localStorage.setItem('likedMovies', JSON.stringify(newLikes));
-
-    // Update users directory for admin view
-    setUsersList((prev) => {
-      const updated = prev.map((u) => (u.email === userEmail ? { ...u, liked_movies: newLikes } : u));
-      try {
-        localStorage.setItem('usersDirectory', JSON.stringify(updated));
-      } catch (err) {
-        void err;
-      }
-      return updated;
-    });
-
-    addAuditLog(`User ${userEmail} ${isCurrentlyLiked ? 'unliked' : 'liked'} "${movieTitle}"`);
 
     // Call backend API if online
     try {
@@ -221,7 +127,6 @@ export default function App() {
   const handleClearLikes = () => {
     setLikedMovies([]);
     localStorage.removeItem('likedMovies');
-    addAuditLog(`User ${userEmail} cleared all liked movies`);
     fetchRecommendations(userEmail, []);
   };
 
@@ -231,25 +136,6 @@ export default function App() {
     const updated = [...new Set([...likedMovies, ...selectedStarterMovies])];
     setLikedMovies(updated);
     localStorage.setItem('likedMovies', JSON.stringify(updated));
-
-    // Update users directory
-    setUsersList((prev) => {
-      const exists = prev.find((u) => u.email === userEmail);
-      let next;
-      if (exists) {
-        next = prev.map((u) => (u.email === userEmail ? { ...u, liked_movies: updated } : u));
-      } else {
-        next = [...prev, { email: userEmail, role: userRole, liked_movies: updated }];
-      }
-      try {
-        localStorage.setItem('usersDirectory', JSON.stringify(next));
-      } catch (err) {
-        void err;
-      }
-      return next;
-    });
-
-    addAuditLog(`User ${userEmail} completed onboarding with ${selectedStarterMovies.length} starter picks`);
 
     // Attempt backend sync
     for (const title of selectedStarterMovies) {
@@ -264,49 +150,29 @@ export default function App() {
   };
 
   // Login / Signup Action
-  const handleLoginSuccess = async ({ email, password, role, isSignup }) => {
-    let token = `demo_jwt_token_${Date.now()}`;
-    let fetchedLikes = likedMovies;
+  const handleLoginSuccess = async ({ email, password, isSignup }) => {
+    const endpoint = isSignup ? `${API_BASE_URL}/signup` : `${API_BASE_URL}/login`;
+    const res = await axios.post(endpoint, { email, password }, { timeout: 3500 });
+    const token = res.data?.access_token;
 
-    try {
-      const endpoint = isSignup ? `${API_BASE_URL}/signup` : `${API_BASE_URL}/login`;
-      const res = await axios.post(endpoint, { email, password }, { timeout: 3500 });
-      if (res.data) {
-        token = res.data.access_token || token;
-        fetchedLikes = res.data.liked_movies || [];
-      }
-    } catch (err) {
-      console.warn("Backend authentication unreachable or skipped, proceeding with authenticated session:", err.message);
+    if (!token) {
+      throw new Error('Authentication failed: the backend did not return an access token.');
     }
+
+    const fetchedLikes = Array.isArray(res.data.liked_movies)
+      ? res.data.liked_movies
+      : [];
 
     // Store session
     localStorage.setItem('accessToken', token);
     localStorage.setItem('userEmail', email);
-    localStorage.setItem('userRole', role);
     localStorage.setItem('likedMovies', JSON.stringify(fetchedLikes));
 
     setUserEmail(email);
-    setUserRole(role);
     setLikedMovies(fetchedLikes);
-    setActiveView(role === 'admin' ? 'admin' : 'home');
+    setActiveView('home');
 
-    // Register user in directory
-    setUsersList((prev) => {
-      if (!prev.find((u) => u.email === email)) {
-        const next = [...prev, { email, role, liked_movies: fetchedLikes }];
-        try {
-          localStorage.setItem('usersDirectory', JSON.stringify(next));
-        } catch (err) {
-          void err;
-        }
-        return next;
-      }
-      return prev;
-    });
-
-    addAuditLog(`User logged in as ${role.toUpperCase()} (${email})`);
-
-    if (role !== 'admin' && fetchedLikes.length < 3) {
+    if (fetchedLikes.length < 3) {
       setShowOnboarding(true);
     } else {
       fetchRecommendations(email, fetchedLikes);
@@ -315,13 +181,10 @@ export default function App() {
 
   // Logout
   const handleLogout = () => {
-    addAuditLog(`User ${userEmail} logged out`);
     localStorage.removeItem('userEmail');
-    localStorage.removeItem('userRole');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('likedMovies');
     setUserEmail('');
-    setUserRole('user');
     setLikedMovies([]);
     setRecommendations([]);
     setActiveView('home');
@@ -330,18 +193,10 @@ export default function App() {
     setStreamingMovie(null);
   };
 
-  // Switch Role Toggle (Convenience demo feature)
-  const handleToggleRole = () => {
-    const nextRole = userRole === 'admin' ? 'user' : 'admin';
-    setUserRole(nextRole);
-    localStorage.setItem('userRole', nextRole);
-    setActiveView(nextRole === 'admin' ? 'admin' : 'home');
-    addAuditLog(`Switched view mode to ${nextRole.toUpperCase()}`);
-  };
-
   // Play Movie / Stream Handler
   const handlePlayMovie = async (movie) => {
     setSelectedMovieForDetail(null);
+    setStreamingUrl('');
     setStreamingMovie(movie);
 
     let stream = DEMO_STREAMS[movie.id] || DEMO_STREAMS.default;
@@ -354,7 +209,6 @@ export default function App() {
       void err;
     }
     setStreamingUrl(stream);
-    addAuditLog(`Viewer launched stream for "${movie.title}"`);
   };
 
   // Watch event feedback from player
@@ -400,35 +254,17 @@ export default function App() {
       {/* Sticky Header */}
       <Navbar
         userEmail={userEmail}
-        userRole={userRole}
         activeView={activeView}
         onSelectView={setActiveView}
         likedCount={likedMovies.length}
         onLogout={handleLogout}
-        onToggleRole={handleToggleRole}
         onOpenTasteProfile={() => setShowTasteProfile(true)}
         onFocusSearch={() => setGlobalSearchQuery('')}
       />
 
       {/* Main Page Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-8 py-6">
-        {/* VIEW 1: ADMIN CONSOLE */}
-        {activeView === 'admin' ? (
-          <AdminDashboard
-            allMovies={allMovies}
-            onUpdateMovies={handleUpdateMovies}
-            hybridWeight={hybridWeight}
-            onUpdateHybridWeight={(w) => {
-              setHybridWeight(w);
-              fetchRecommendations(userEmail, likedMovies);
-            }}
-            usersList={usersList}
-            auditLogs={auditLogs}
-            onAddAuditLog={addAuditLog}
-            onSwitchToUser={() => setActiveView('home')}
-          />
-        ) : activeView === 'search' ? (
-          /* VIEW 2: SEARCH & DISCOVERY */
+        {activeView === 'search' ? (
           <SearchDiscovery
             allMovies={allMovies}
             likedMovies={likedMovies}
@@ -439,7 +275,6 @@ export default function App() {
             setSearchQuery={setGlobalSearchQuery}
           />
         ) : (
-          /* VIEW 3: HOME FEED WITH RECOMMENDATIONS */
           <div className="space-y-12">
             {/* Hero Blockbuster */}
             <HeroBanner

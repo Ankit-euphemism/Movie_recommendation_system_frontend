@@ -3,8 +3,7 @@ import { X, Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-rea
 import axios from 'axios';
 import Hls from 'hls.js';
 import { DEFAULT_STREAM_URL, DEMO_STREAMS } from '../utils/recommender';
-
-const API_BASE_URL = "http://localhost:8000/api";
+import { API_BASE_URL, getAuthHeaders } from '../utils/api';
 
 export default function VideoPlayerModal({ movie, videoUrl, userEmail, onClose, onWatchEvent }) {
   const activeVideoUrl = videoUrl || DEMO_STREAMS[movie?.id] || DEFAULT_STREAM_URL;
@@ -117,9 +116,7 @@ useEffect(() => {
           movie_title: movie.title,
           watched_percentage: percentage
         }, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}`
-          }
+          headers: getAuthHeaders()
         });
         if (onWatchEvent) onWatchEvent(res.data.updated_likes);
       } catch (err) {

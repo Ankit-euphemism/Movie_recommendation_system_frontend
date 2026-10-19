@@ -1,13 +1,11 @@
-import { Film, LogOut, Search, Heart, ShieldCheck, User } from 'lucide-react';
+import { Film, LogOut, Search, Heart } from 'lucide-react';
 
 export default function Navbar({
   userEmail,
-  userRole,
   activeView,
   onSelectView,
   likedCount,
   onLogout,
-  onToggleRole,
   onOpenTasteProfile,
   onFocusSearch,
 }) {
@@ -60,17 +58,6 @@ export default function Navbar({
               <Heart className="w-3.5 h-3.5 text-netflixRed" />
               Taste Profile ({likedCount})
             </button>
-            <button
-              onClick={() => onSelectView('admin')}
-              className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-                activeView === 'admin'
-                  ? 'text-white bg-netflixRed/20 text-netflixRed border border-netflixRed/40'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-netflixRed" />
-              Admin Portal
-            </button>
           </nav>
         </div>
 
@@ -86,29 +73,6 @@ export default function Navbar({
             title="Search Movies"
           >
             <Search className="w-4 h-4" />
-          </button>
-
-          {/* Role Toggle Button (Quick demo switcher) */}
-          <button
-            onClick={onToggleRole}
-            className={`text-xs px-3 py-1.5 rounded-lg font-bold border transition-all flex items-center gap-1.5 ${
-              userRole === 'admin'
-                ? 'bg-purple-900/40 text-purple-300 border-purple-500/50 hover:bg-purple-900/60'
-                : 'bg-gray-900 text-gray-300 border-gray-700 hover:bg-gray-800'
-            }`}
-            title="Switch between User and Admin views"
-          >
-            {userRole === 'admin' ? (
-              <>
-                <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-                <span className="hidden sm:inline">Admin Mode</span>
-              </>
-            ) : (
-              <>
-                <User className="w-3.5 h-3.5 text-blue-400" />
-                <span className="hidden sm:inline">User Mode</span>
-              </>
-            )}
           </button>
 
           {/* User Email Pill */}
