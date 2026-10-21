@@ -1,86 +1,115 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import axios from 'axios';
-import { Sparkles, Loader, Film, Heart, Sliders, Search, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from "react";
+import axios from "axios";
+import {
+  Sparkles,
+  Loader,
+  Film,
+  Heart,
+  Sliders,
+  Search,
+  ArrowRight,
+} from "lucide-react";
 
-import initialMoviesCatalog from './data/movies.json';
-import Navbar from './components/Navbar';
-import HeroBanner from './components/HeroBanner';
-import MovieCard from './components/MovieCard';
-import MovieDetailModal from './components/MovieDetailModal';
-import SearchDiscovery from './components/SearchDiscovery';
-import AuthModal from './components/AuthModal';
-import TasteProfileModal from './components/TasteProfileModal';
-import OnboardingModal from './components/OnboardingModal';
-import VideoPlayerModal from './components/VideoPlayerModal';
+import initialMoviesCatalog from "./data/movies.json";
+import Navbar from "./components/Navbar";
+import HeroBanner from "./components/HeroBanner";
+import MovieCard from "./components/MovieCard";
+import MovieDetailModal from "./components/MovieDetailModal";
+import SearchDiscovery from "./components/SearchDiscovery";
+import AuthModal from "./components/AuthModal";
+import TasteProfileModal from "./components/TasteProfileModal";
+import OnboardingModal from "./components/OnboardingModal";
+import VideoPlayerModal from "./components/VideoPlayerModal";
 
 import {
   generateClientRecommendations,
   DEMO_STREAMS,
-} from './utils/recommender';
-import { API_BASE_URL, getAuthHeaders } from './utils/api';
+} from "./utils/recommender";
+import { API_BASE_URL, getAuthHeaders } from "./utils/api";
 
 export default function App() {
   const allMovies = initialMoviesCatalog;
-  const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || '');
+  const [userEmail, setUserEmail] = useState(
+    localStorage.getItem("userEmail") || "",
+  );
   const [likedMovies, setLikedMovies] = useState([]);
 
   // Active View State: 'home' | 'search'
-  const [activeView, setActiveView] = useState('home');
+  const [activeView, setActiveView] = useState("home");
 
   // Search Query for quick jump
-  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   // Recommender State
   const [recommendations, setRecommendations] = useState([]);
   const hybridWeight = 0.5;
   const [loading, setLoading] = useState(false);
-  const [userStatus, setUserStatus] = useState('Hybrid Active');
+  const [userStatus, setUserStatus] = useState("Hybrid Active");
 
   // Modals & Overlays
   const [selectedMovieForDetail, setSelectedMovieForDetail] = useState(null);
   const [streamingMovie, setStreamingMovie] = useState(null);
-  const [streamingUrl, setStreamingUrl] = useState('');
+  const [streamingUrl, setStreamingUrl] = useState("");
   const [showTasteProfile, setShowTasteProfile] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Recommender Fetcher (Combines FastAPI ML response with rich frontend metadata)
-  const fetchRecommendations = useCallback(async (email, currentLikes = likedMovies) => {
-    setLoading(true);
-    let backendSuccess = false;
+  const fetchRecommendations = useCallback(
+    async (email, currentLikes = likedMovies) => {
+      setLoading(true);
+      let backendSuccess = false;
 
-   try {
-      const res = await axios.get(`${API_BASE_URL}/hybrid-recommendations`, {
-        params: { email, top_n: 12, weight_a: hybridWeight },
-        headers: getAuthHeaders(),
-        timeout: 4000,
-      });
-
-      if (res.data && res.data.recommendations && res.data.recommendations.length > 0) {
-        backendSuccess = true;
-        // Merge backend scoring with our rich movie records (posters, cast, descriptions)
-        const enriched = res.data.recommendations.map((rec) => {
-          const match = allMovies.find((m) => m.id === rec.id || m.title.toLowerCase() === rec.title.toLowerCase());
-          return {
-            ...(match || {}),
-            ...rec,
-          };
+      try {
+        const res = await axios.get(`${API_BASE_URL}/hybrid-recommendations`, {
+          params: { email, top_n: 12, weight_a: hybridWeight },
+          headers: getAuthHeaders(),
+          timeout: 4000,
         });
-        setRecommendations(enriched);
-        setUserStatus('Backend ML Active (Postgres + SVD)');
+
+        if (
+          res.data &&
+          res.data.recommendations &&
+          res.data.recommendations.length > 0
+        ) {
+          backendSuccess = true;
+          // Merge backend scoring with our rich movie records (posters, cast, descriptions)
+          const enriched = res.data.recommendations.map((rec) => {
+            const match = allMovies.find(
+              (m) =>
+                m.id === rec.id ||
+                m.title.toLowerCase() === rec.title.toLowerCase(),
+            );
+            return {
+              ...(match || {}),
+              ...rec,
+            };
+          });
+          setRecommendations(enriched);
+          setUserStatus("Backend ML Active (Postgres + SVD)");
+        }
+      } catch (err) {
+        console.warn(
+          "FastAPI backend not reached or empty profile. Using resilient client hybrid engine:",
+          err.message,
+        );
       }
-    } catch (err) {
-      console.warn("FastAPI backend not reached or empty profile. Using resilient client hybrid engine:", err.message);
-    }
 
-    // Resilient Fallback: If backend is offline or returned empty, compute client-side
-    if (!backendSuccess) {
-      const clientRecs = generateClientRecommendations(currentLikes, allMovies, 12, hybridWeight);
-      setRecommendations(clientRecs);
-      setUserStatus('Hybrid Resilient Engine (Content + Collaborative)');
-    }
+      // Resilient Fallback: If backend is offline or returned empty, compute client-side
+      if (!backendSuccess) {
+        const clientRecs = generateClientRecommendations(
+          currentLikes,
+          allMovies,
+          12,
+          hybridWeight,
+        );
+        setRecommendations(clientRecs);
+        setUserStatus("Hybrid Resilient Engine (Content + Collaborative)");
+      }
 
-    setLoading(false);
-  }, [allMovies, hybridWeight, likedMovies]);
+      setLoading(false);
+    },
+    [allMovies, hybridWeight, likedMovies],
+  );
 
   // Initial user setup
   useEffect(() => {
@@ -105,14 +134,14 @@ export default function App() {
       : [...likedMovies, movieTitle];
 
     setLikedMovies(newLikes);
-    localStorage.setItem('likedMovies', JSON.stringify(newLikes));
+    localStorage.setItem("likedMovies", JSON.stringify(newLikes));
 
     // Call backend API if online
     try {
       await axios.post(
         `${API_BASE_URL}/like`,
         { email: userEmail, movie_title: movieTitle },
-        { headers: getAuthHeaders(), timeout: 2500 }
+        { headers: getAuthHeaders(), timeout: 2500 },
       );
     } catch (err) {
       void err;
@@ -126,7 +155,7 @@ export default function App() {
   // Clear Likes
   const handleClearLikes = () => {
     setLikedMovies([]);
-    localStorage.removeItem('likedMovies');
+    localStorage.removeItem("likedMovies");
     fetchRecommendations(userEmail, []);
   };
 
@@ -135,12 +164,16 @@ export default function App() {
     setShowOnboarding(false);
     const updated = [...new Set([...likedMovies, ...selectedStarterMovies])];
     setLikedMovies(updated);
-    localStorage.setItem('likedMovies', JSON.stringify(updated));
+    localStorage.setItem("likedMovies", JSON.stringify(updated));
 
     // Attempt backend sync
     for (const title of selectedStarterMovies) {
       try {
-        await axios.post(`${API_BASE_URL}/like`, { email: userEmail, movie_title: title }, { headers: getAuthHeaders(), timeout: 1500 });
+        await axios.post(
+          `${API_BASE_URL}/like`,
+          { email: userEmail, movie_title: title },
+          { headers: getAuthHeaders(), timeout: 1500 },
+        );
       } catch (err) {
         void err;
       }
@@ -151,12 +184,20 @@ export default function App() {
 
   // Login / Signup Action
   const handleLoginSuccess = async ({ email, password, isSignup }) => {
-    const endpoint = isSignup ? `${API_BASE_URL}/signup` : `${API_BASE_URL}/login`;
-    const res = await axios.post(endpoint, { email, password }, { timeout: 3500 });
+    const endpoint = isSignup
+      ? `${API_BASE_URL}/signup`
+      : `${API_BASE_URL}/login`;
+    const res = await axios.post(
+      endpoint,
+      { email, password },
+      { timeout: 3500 },
+    );
     const token = res.data?.access_token;
 
     if (!token) {
-      throw new Error('Authentication failed: the backend did not return an access token.');
+      throw new Error(
+        "Authentication failed: the backend did not return an access token.",
+      );
     }
 
     const fetchedLikes = Array.isArray(res.data.liked_movies)
@@ -164,13 +205,13 @@ export default function App() {
       : [];
 
     // Store session
-    localStorage.setItem('accessToken', token);
-    localStorage.setItem('userEmail', email);
-    localStorage.setItem('likedMovies', JSON.stringify(fetchedLikes));
+    localStorage.setItem("accessToken", token);
+    localStorage.setItem("userEmail", email);
+    localStorage.setItem("likedMovies", JSON.stringify(fetchedLikes));
 
     setUserEmail(email);
     setLikedMovies(fetchedLikes);
-    setActiveView('home');
+    setActiveView("home");
 
     if (fetchedLikes.length < 3) {
       setShowOnboarding(true);
@@ -181,13 +222,13 @@ export default function App() {
 
   // Logout
   const handleLogout = () => {
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('likedMovies');
-    setUserEmail('');
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("likedMovies");
+    setUserEmail("");
     setLikedMovies([]);
     setRecommendations([]);
-    setActiveView('home');
+    setActiveView("home");
     setShowOnboarding(false);
     setSelectedMovieForDetail(null);
     setStreamingMovie(null);
@@ -196,12 +237,14 @@ export default function App() {
   // Play Movie / Stream Handler
   const handlePlayMovie = async (movie) => {
     setSelectedMovieForDetail(null);
-    setStreamingUrl('');
+    setStreamingUrl("");
     setStreamingMovie(movie);
 
     let stream = DEMO_STREAMS[movie.id] || DEMO_STREAMS.default;
     try {
-      const res = await axios.get(`${API_BASE_URL}/stream/${movie.id}`, { timeout: 2000 });
+      const res = await axios.get(`${API_BASE_URL}/stream/${movie.id}`, {
+        timeout: 2000,
+      });
       if (res.data?.video_url) {
         stream = res.data.video_url;
       }
@@ -215,7 +258,7 @@ export default function App() {
   const handleWatchEvent = (updatedLikes) => {
     if (updatedLikes && Array.isArray(updatedLikes)) {
       setLikedMovies(updatedLikes);
-      localStorage.setItem('likedMovies', JSON.stringify(updatedLikes));
+      localStorage.setItem("likedMovies", JSON.stringify(updatedLikes));
       fetchRecommendations(userEmail, updatedLikes);
     }
   };
@@ -228,15 +271,23 @@ export default function App() {
 
   // Curated category rows
   const sciFiMovies = useMemo(() => {
-    return allMovies.filter((m) => m.genres && m.genres.toLowerCase().includes('science fiction')).slice(0, 12);
+    return allMovies
+      .filter(
+        (m) => m.genres && m.genres.toLowerCase().includes("science fiction"),
+      )
+      .slice(0, 12);
   }, [allMovies]);
 
   const actionMovies = useMemo(() => {
-    return allMovies.filter((m) => m.genres && m.genres.toLowerCase().includes('action')).slice(0, 12);
+    return allMovies
+      .filter((m) => m.genres && m.genres.toLowerCase().includes("action"))
+      .slice(0, 12);
   }, [allMovies]);
 
   const topRatedMovies = useMemo(() => {
-    return [...allMovies].sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 12);
+    return [...allMovies]
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 12);
   }, [allMovies]);
 
   const userSavedMovieObjects = useMemo(() => {
@@ -259,12 +310,12 @@ export default function App() {
         likedCount={likedMovies.length}
         onLogout={handleLogout}
         onOpenTasteProfile={() => setShowTasteProfile(true)}
-        onFocusSearch={() => setGlobalSearchQuery('')}
+        onFocusSearch={() => setGlobalSearchQuery("")}
       />
 
       {/* Main Page Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-8 py-6">
-        {activeView === 'search' ? (
+        {activeView === "search" ? (
           <SearchDiscovery
             allMovies={allMovies}
             likedMovies={likedMovies}
@@ -301,11 +352,13 @@ export default function App() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    Engine Status: <strong className="text-emerald-400">{userStatus}</strong> • Weight:{' '}
+                    Engine Status:{" "}
+                    <strong className="text-emerald-400">{userStatus}</strong> •
+                    Weight:{" "}
                     <span className="text-netflixRed font-mono font-bold">
                       {Math.round(hybridWeight * 100)}% Content
-                    </span>{' '}
-                    +{' '}
+                    </span>{" "}
+                    +{" "}
                     <span className="text-blue-400 font-mono font-bold">
                       {Math.round((1 - hybridWeight) * 100)}% SVD Collab
                     </span>
@@ -322,7 +375,7 @@ export default function App() {
                   Manage Saved ({likedMovies.length})
                 </button>
                 <button
-                  onClick={() => setActiveView('search')}
+                  onClick={() => setActiveView("search")}
                   className="bg-netflixRed/20 hover:bg-netflixRed/30 text-netflixRed border border-netflixRed/40 text-xs px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5"
                 >
                   <Search className="w-3.5 h-3.5" /> Search Catalog
@@ -339,7 +392,8 @@ export default function App() {
                     Top Hybrid Recommendations for You
                   </h2>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    Ranked by combining TF-IDF similarity vectors with collaborative SVD ratings
+                    Ranked by combining TF-IDF similarity vectors with
+                    collaborative SVD ratings
                   </p>
                 </div>
                 <button
@@ -371,9 +425,12 @@ export default function App() {
               ) : (
                 <div className="text-center py-16 bg-netflixCard rounded-2xl border border-gray-800 space-y-3">
                   <Film className="w-10 h-10 text-gray-600 mx-auto" />
-                  <h3 className="text-base font-bold text-white">Build Your Recommendations</h3>
+                  <h3 className="text-base font-bold text-white">
+                    Build Your Recommendations
+                  </h3>
                   <p className="text-xs text-gray-400 max-w-md mx-auto">
-                    Select a few movies you like to initialize your personalized AI suggestions.
+                    Select a few movies you like to initialize your personalized
+                    AI suggestions.
                   </p>
                   <button
                     onClick={() => setShowOnboarding(true)}
@@ -388,11 +445,13 @@ export default function App() {
             {/* CATEGORY ROW 1: Sci-Fi & Adventure */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white">🚀 Sci-Fi & Adventure Universe</h3>
+                <h3 className="text-lg font-bold text-white">
+                  🚀 Sci-Fi & Adventure Universe
+                </h3>
                 <button
                   onClick={() => {
-                    setActiveView('search');
-                    setGlobalSearchQuery('Science Fiction');
+                    setActiveView("search");
+                    setGlobalSearchQuery("Science Fiction");
                   }}
                   className="text-xs text-netflixRed hover:underline flex items-center gap-1"
                 >
@@ -416,11 +475,13 @@ export default function App() {
             {/* CATEGORY ROW 2: High-Octane Action */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white">⚡ High-Octane Action & Thrillers</h3>
+                <h3 className="text-lg font-bold text-white">
+                  ⚡ High-Octane Action & Thrillers
+                </h3>
                 <button
                   onClick={() => {
-                    setActiveView('search');
-                    setGlobalSearchQuery('Action');
+                    setActiveView("search");
+                    setGlobalSearchQuery("Action");
                   }}
                   className="text-xs text-netflixRed hover:underline flex items-center gap-1"
                 >
@@ -444,9 +505,11 @@ export default function App() {
             {/* CATEGORY ROW 3: Top Rated Masterpieces */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white">⭐ Critically Acclaimed Masterpieces</h3>
+                <h3 className="text-lg font-bold text-white">
+                  ⭐ Critically Acclaimed Masterpieces
+                </h3>
                 <button
-                  onClick={() => setActiveView('search')}
+                  onClick={() => setActiveView("search")}
                   className="text-xs text-netflixRed hover:underline flex items-center gap-1"
                 >
                   View All <ArrowRight className="w-3.5 h-3.5" />
@@ -472,7 +535,8 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
                     <Heart className="w-4 h-4 text-netflixRed fill-current" />
-                    Your Saved & Liked Collection ({userSavedMovieObjects.length})
+                    Your Saved & Liked Collection (
+                    {userSavedMovieObjects.length})
                   </h3>
                   <button
                     onClick={() => setShowTasteProfile(true)}
@@ -520,7 +584,7 @@ export default function App() {
           userEmail={userEmail}
           onClose={() => {
             setStreamingMovie(null);
-            setStreamingUrl('');
+            setStreamingUrl("");
           }}
           onWatchEvent={handleWatchEvent}
         />
