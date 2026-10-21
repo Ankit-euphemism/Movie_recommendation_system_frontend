@@ -22,7 +22,6 @@ import OnboardingModal from "./components/OnboardingModal";
 import VideoPlayerModal from "./components/VideoPlayerModal";
 
 import {
-  generateClientRecommendations,
   DEMO_STREAMS,
 } from "./utils/recommender";
 import { API_BASE_URL, getAuthHeaders } from "./utils/api";
@@ -44,7 +43,8 @@ export default function App() {
   const [recommendations, setRecommendations] = useState([]);
   const hybridWeight = 0.5;
   const [loading, setLoading] = useState(false);
-  const [userStatus, setUserStatus] = useState("Hybrid Active");
+  const [userStatus, setUserStatus] = useState('Hybrid Active');
+  const [recommendationError, setRecommendationError] = useState('');
 
   // Modals & Overlays
   const [selectedMovieForDetail, setSelectedMovieForDetail] = useState(null);
@@ -53,63 +53,42 @@ export default function App() {
   const [showTasteProfile, setShowTasteProfile] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Recommender Fetcher (Combines FastAPI ML response with rich frontend metadata)
-  const fetchRecommendations = useCallback(
-    async (email, currentLikes = likedMovies) => {
-      setLoading(true);
-      let backendSuccess = false;
+  // Recommendations are ranked exclusively by the FastAPI ML service.
+  const fetchRecommendations = useCallback(async (email) => {
+    setLoading(true);
+    setRecommendationError('');
+    setRecommendations([]);
 
-      try {
-        const res = await axios.get(`${API_BASE_URL}/hybrid-recommendations`, {
-          params: { email, top_n: 12, weight_a: hybridWeight },
-          headers: getAuthHeaders(),
-          timeout: 4000,
+    try {
+      const res = await axios.get(`${API_BASE_URL}/hybrid-recommendations`, {
+        params: { email, top_n: 12, weight_a: hybridWeight },
+        headers: getAuthHeaders(),
+        timeout: 4000,
+      });
+
+      if (Array.isArray(res.data?.recommendations)) {
+        // Merge backend scoring with our rich movie records (posters, cast, descriptions)
+        const enriched = res.data.recommendations.map((rec) => {
+          const match = allMovies.find((m) => m.id === rec.id || m.title.toLowerCase() === rec.title.toLowerCase());
+          return {
+            ...(match || {}),
+            ...rec,
+          };
         });
-
-        if (
-          res.data &&
-          res.data.recommendations &&
-          res.data.recommendations.length > 0
-        ) {
-          backendSuccess = true;
-          // Merge backend scoring with our rich movie records (posters, cast, descriptions)
-          const enriched = res.data.recommendations.map((rec) => {
-            const match = allMovies.find(
-              (m) =>
-                m.id === rec.id ||
-                m.title.toLowerCase() === rec.title.toLowerCase(),
-            );
-            return {
-              ...(match || {}),
-              ...rec,
-            };
-          });
-          setRecommendations(enriched);
-          setUserStatus("Backend ML Active (Postgres + SVD)");
-        }
-      } catch (err) {
-        console.warn(
-          "FastAPI backend not reached or empty profile. Using resilient client hybrid engine:",
-          err.message,
-        );
+        setRecommendations(enriched);
+        setUserStatus('Backend ML Active (Postgres + SVD)');
+      } else {
+        throw new Error('The backend returned an invalid recommendation response.');
       }
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.message || 'Recommendation service unavailable.';
+      setRecommendationError(`Backend recommendations unavailable: ${detail}`);
+      setUserStatus('Backend ML Unavailable');
+      console.error('Backend recommendation request failed:', err);
+    }
 
-      // Resilient Fallback: If backend is offline or returned empty, compute client-side
-      if (!backendSuccess) {
-        const clientRecs = generateClientRecommendations(
-          currentLikes,
-          allMovies,
-          12,
-          hybridWeight,
-        );
-        setRecommendations(clientRecs);
-        setUserStatus("Hybrid Resilient Engine (Content + Collaborative)");
-      }
-
-      setLoading(false);
-    },
-    [allMovies, hybridWeight, likedMovies],
-  );
+    setLoading(false);
+  }, [allMovies, hybridWeight]);
 
   // Initial user setup
   useEffect(() => {
@@ -120,7 +99,7 @@ export default function App() {
       return () => clearTimeout(timer);
     } else {
       const timer = setTimeout(() => {
-        fetchRecommendations(userEmail, likedMovies);
+        fetchRecommendations(userEmail);
       }, 0);
       return () => clearTimeout(timer);
     }
@@ -149,14 +128,27 @@ export default function App() {
     }
 
     // Refresh recommendations
-    fetchRecommendations(userEmail, newLikes);
+    fetchRecommendations(userEmail);
   };
 
   // Clear Likes
-  const handleClearLikes = () => {
+  const handleClearLikes = async () => {
+    try {
+      await axios.delete(`${API_BASE_URL}/likes`, {
+        headers: getAuthHeaders(),
+        timeout: 2500,
+      });
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.message || 'Unable to clear the backend taste profile.';
+      setRecommendationError(`Backend profile update failed: ${detail}`);
+      console.error('Backend clear likes request failed:', err);
+      return;
+    }
+
     setLikedMovies([]);
-    localStorage.removeItem("likedMovies");
-    fetchRecommendations(userEmail, []);
+    localStorage.removeItem('likedMovies');
+    setRecommendations([]);
+    setRecommendationError('');
   };
 
   // Complete Onboarding
@@ -179,7 +171,7 @@ export default function App() {
       }
     }
 
-    fetchRecommendations(userEmail, updated);
+    fetchRecommendations(userEmail);
   };
 
   // Login / Signup Action
@@ -216,7 +208,7 @@ export default function App() {
     if (fetchedLikes.length < 3) {
       setShowOnboarding(true);
     } else {
-      fetchRecommendations(email, fetchedLikes);
+      fetchRecommendations(email);
     }
   };
 
@@ -258,8 +250,8 @@ export default function App() {
   const handleWatchEvent = (updatedLikes) => {
     if (updatedLikes && Array.isArray(updatedLikes)) {
       setLikedMovies(updatedLikes);
-      localStorage.setItem("likedMovies", JSON.stringify(updatedLikes));
-      fetchRecommendations(userEmail, updatedLikes);
+      localStorage.setItem('likedMovies', JSON.stringify(updatedLikes));
+      fetchRecommendations(userEmail);
     }
   };
 
@@ -397,7 +389,7 @@ export default function App() {
                   </p>
                 </div>
                 <button
-                  onClick={() => fetchRecommendations(userEmail, likedMovies)}
+                  onClick={() => fetchRecommendations(userEmail)}
                   className="text-xs text-gray-400 hover:text-white flex items-center gap-1 font-semibold"
                 >
                   Refresh Feed
@@ -407,6 +399,18 @@ export default function App() {
               {loading ? (
                 <div className="flex items-center justify-center py-24 bg-netflixCard/50 rounded-2xl border border-gray-800">
                   <Loader className="w-8 h-8 animate-spin text-netflixRed" />
+                </div>
+              ) : recommendationError ? (
+                <div className="text-center py-16 bg-netflixCard rounded-2xl border border-red-900/50 space-y-3">
+                  <Film className="w-10 h-10 text-red-400 mx-auto" />
+                  <h3 className="text-base font-bold text-white">Backend Recommendations Unavailable</h3>
+                  <p className="text-xs text-red-300 max-w-md mx-auto">{recommendationError}</p>
+                  <button
+                    onClick={() => fetchRecommendations(userEmail)}
+                    className="bg-netflixRed hover:bg-red-700 text-white text-xs px-5 py-2.5 rounded-xl font-bold"
+                  >
+                    Retry Backend
+                  </button>
                 </div>
               ) : recommendations.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
