@@ -7,7 +7,7 @@ FlixRecommend is a Vite + React movie-discovery frontend with personalized hybri
 - Email/password sign-in and sign-up flows, plus one-click user and admin demo access
 - First-time taste onboarding and a saved-movies profile
 - Hybrid recommendation feed that blends content affinity with collaborative/popularity signals
-- Resilient client-side recommendations when the backend is unavailable
+- Backend-only hybrid recommendations with an explicit unavailable state
 - Search, genre filtering, and title, rating, or release-year sorting
 - Movie details, related titles, likes, and a video player with MP4/HLS support
 - Admin workspace for catalog CRUD, viewer-profile inspection, recommendation-weight tuning, and audit logs
@@ -52,11 +52,11 @@ npm run lint      # Run ESLint
 4. Save or remove movies to refresh the recommendations. Open a movie to see details, similar titles, and playback.
 5. Switch to the admin role to manage the in-browser catalog and adjust the content/collaborative weighting.
 
-The default experience is self-contained: it uses `src/data/movies.json`, client-side scoring, demo video streams, and browser storage. It remains usable if no backend is running.
+The frontend uses `src/data/movies.json` for catalog display metadata, demo video streams, and browser session state. Recommendation ranking requires the backend service.
 
 ## Optional Backend Integration
 
-The frontend sends requests to `http://localhost:8000/api`. When the API responds successfully, its recommendation results and stream URLs are used; otherwise the app falls back to its local demo behavior.
+The frontend sends requests to `http://localhost:8000/api`. Recommendation rankings are always requested from the backend ML service. If the recommendation endpoint is unavailable or returns an error, the UI shows an error and does not generate local recommendation scores. Stream playback still uses the local demo fallback when the backend stream endpoint is unavailable.
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
@@ -64,6 +64,7 @@ The frontend sends requests to `http://localhost:8000/api`. When the API respond
 | `/login` | `POST` | Authenticate and return session data |
 | `/hybrid-recommendations` | `GET` | Retrieve recommendations for `email`, `top_n`, and `weight_a` |
 | `/like` | `POST` | Sync a movie like/unlike action |
+| `/likes` | `DELETE` | Clear the authenticated user's backend taste profile |
 | `/stream/{movie_id}` | `GET` | Provide a `video_url` for playback |
 | `/watch-event` | `POST` | Record watch progress/events from the player |
 
@@ -94,7 +95,7 @@ Use Logout to clear the session and liked movies. To fully reset the demo—incl
 ├── src/
 │   ├── components/               # Auth, catalog, discovery, player, and admin UI
 │   ├── data/movies.json          # Bundled movie catalog
-│   ├── utils/recommender.js      # Search, media, and fallback recommendation logic
+│   ├── utils/recommender.js      # Search and media URL utilities
 │   ├── App.jsx                   # Application state and API orchestration
 │   ├── index.css                 # Global styles and Tailwind layers
 │   └── main.jsx                  # React entry point
@@ -106,7 +107,7 @@ Use Logout to clear the session and liked movies. To fully reset the demo—incl
 
 ## Troubleshooting
 
-- **The backend is offline:** this is expected in standalone mode. The interface continues with local authentication, catalog data, recommendations, and demo streams.
+- **The backend is offline:** catalog browsing and demo streams remain available, but personalized recommendations are not generated locally; the home feed displays a backend-unavailable message.
 - **Requests fail with CORS errors:** start the API on port `8000` or update the frontend API URLs, then allow the Vite origin in backend CORS settings.
 - **A video does not play:** check that a backend `video_url` is publicly reachable. HLS streams should be served as `.m3u8`; otherwise the bundled MP4 fallback is used.
 - **You need a fresh demo:** clear the application's local storage, then reload the page.
